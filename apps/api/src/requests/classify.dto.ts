@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { ClassificationCategory } from './keyword-classifier';
+import { ClassificationCategory } from './classifier';
 
 export type ClassifyRequestBody = {
   message?: unknown;

@@ -1,4 +1,4 @@
-import { ClassificationResult } from './keyword-classifier';
+import { ClassificationResult } from './classifier';
 
 const SHORT_MESSAGE_WORD_LIMIT = 3;
 const SHORT_MESSAGE_CONFIDENCE_PENALTY = 0.15;

@@ -78,7 +78,21 @@ export async function classifyMessage(
   return res.json();
 }
 
-export async function fetchHistory(category?: string) {
+export type HistoryItem = {
+  id: string;
+  requestId: string | null;
+  message: string;
+  category: string;
+  confidence: number;
+  provider: string;
+  createdAt: string;
+};
+
+export type HistoryResponse = {
+  items: HistoryItem[];
+};
+
+export async function fetchHistory(category?: string): Promise<HistoryResponse> {
   const qs = category ? `?category=${encodeURIComponent(category)}` : '';
   const res = await fetch(`${API_URL}/requests/history${qs}`);
   if (!res.ok) {

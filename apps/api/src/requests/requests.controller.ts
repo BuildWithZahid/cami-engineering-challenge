@@ -21,11 +21,8 @@ export class RequestsController {
   }
 
   @Get('history')
-  history(@Query('category') _category?: string) {
-    return {
-      items: [],
-      message: 'Classification history is not implemented yet.',
-    };
+  history(@Query('category') category?: string) {
+    return this.requestsService.listHistory(category);
   }
 
   @Get(':id')

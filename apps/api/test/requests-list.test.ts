@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { createDataSource } from '../src/data-source';
 import { CustomerRequest } from '../src/requests/customer-request.entity';
+import { ClassificationEvent } from '../src/requests/classification-event.entity';
 import { KeywordClassifier } from '../src/requests/keyword-classifier';
 import { RequestsService } from '../src/requests/requests.service';
 
@@ -19,16 +20,21 @@ describe('RequestsService.list', () => {
     await ds.runMigrations();
     service = new RequestsService(
       ds.getRepository(CustomerRequest),
+      ds.getRepository(ClassificationEvent),
       new KeywordClassifier(),
     );
   });
 
   afterAll(async () => {
     if (createdIds.length > 0) {
+      await ds.query('DELETE FROM classification_events WHERE request_id = ANY($1::uuid[])', [
+        createdIds,
+      ]);
       await ds.query('DELETE FROM customer_requests WHERE id = ANY($1::uuid[])', [
         createdIds,
       ]);
     }
+    await ds.query('DELETE FROM classification_events WHERE message LIKE $1', [`${PREFIX}%`]);
     if (ds?.isInitialized) {
       await ds.destroy();
     }
@@ -106,5 +112,27 @@ describe('RequestsService.list', () => {
     expect(stored.status).toBe('in_progress');
     expect(stored.category).toBe('billing');
     expect(stored.confidence).toBeGreaterThan(0.5);
+
+    const history = await service.listHistory();
+    const recorded = history.items.find((item) => item.requestId === row.id);
+    expect(recorded).toMatchObject({
+      category: 'billing',
+      provider: 'keyword',
+      message: 'Please fix my invoice and payment charge',
+    });
+  });
+
+  it('filters classification history by category', async () => {
+    const result = await service.classify({
+      message: `${PREFIX} sales pricing demo for next quarter`,
+    });
+    expect(result.category).toBe('sales');
+
+    const sales = await service.listHistory('sales');
+    expect(sales.items.length).toBeGreaterThan(0);
+    expect(sales.items.every((item) => item.category === 'sales')).toBe(true);
+
+    const billing = await service.listHistory('billing');
+    expect(billing.items.every((item) => item.category === 'billing')).toBe(true);
   });
 });

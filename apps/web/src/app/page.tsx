@@ -79,6 +79,7 @@ export default function HomePage() {
         }),
       );
       void queryClient.invalidateQueries({ queryKey: REQUESTS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['history'] });
     },
   });
 

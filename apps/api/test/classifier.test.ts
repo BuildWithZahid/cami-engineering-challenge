@@ -7,6 +7,10 @@ import { BadRequestException } from '@nestjs/common';
 describe('KeywordClassifier', () => {
   const classifier = new KeywordClassifier();
 
+  it('identifies itself as the keyword provider', () => {
+    expect(classifier.id).toBe('keyword');
+  });
+
   it('classifies billing messages', () => {
     const result = classifier.classify('Please fix my invoice and payment charge');
     expect(result.category).toBe('billing');

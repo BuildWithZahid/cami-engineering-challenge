@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { applyClassificationPolicy } from './classification-policy';
+import { ClassificationEvent } from './classification-event.entity';
+import { CLASSIFIER, Classifier, isClassificationCategory } from './classifier';
 import { ClassifyInput, ClassifyResponse } from './classify.dto';
 import { CustomerRequest, RequestStatus } from './customer-request.entity';
-import { KeywordClassifier } from './keyword-classifier';
 
 export type RequestListItem = {
   id: string;
@@ -18,12 +19,26 @@ export type RequestListItem = {
   updatedAt: string;
 };
 
+export type HistoryItem = {
+  id: string;
+  requestId: string | null;
+  message: string;
+  category: string;
+  confidence: number;
+  provider: string;
+  createdAt: string;
+};
+
+const HISTORY_LIMIT = 100;
+
 @Injectable()
 export class RequestsService {
   constructor(
     @InjectRepository(CustomerRequest)
     private readonly requests: Repository<CustomerRequest>,
-    private readonly classifier: KeywordClassifier,
+    @InjectRepository(ClassificationEvent)
+    private readonly events: Repository<ClassificationEvent>,
+    @Inject(CLASSIFIER) private readonly classifier: Classifier,
   ) {}
 
   async list(): Promise<RequestListItem[]> {
@@ -109,7 +124,7 @@ export class RequestsService {
   async classify(input: ClassifyInput): Promise<ClassifyResponse> {
     const result = applyClassificationPolicy(
       input.message,
-      this.classifier.classify(input.message),
+      await this.classifier.classify(input.message),
     );
 
     if (input.requestId) {
@@ -122,10 +137,44 @@ export class RequestsService {
       await this.requests.save(existing);
     }
 
+    await this.events.save(
+      this.events.create({
+        requestId: input.requestId ?? null,
+        message: input.message,
+        category: result.category,
+        confidence: result.confidence,
+        provider: this.classifier.id,
+      }),
+    );
+
     return {
       category: result.category,
       confidence: result.confidence,
       requestId: input.requestId ?? null,
+    };
+  }
+
+  async listHistory(category?: string): Promise<{ items: HistoryItem[] }> {
+    const qb = this.events
+      .createQueryBuilder('event')
+      .orderBy('event.createdAt', 'DESC')
+      .take(HISTORY_LIMIT);
+
+    if (category && isClassificationCategory(category)) {
+      qb.andWhere('event.category = :category', { category });
+    }
+
+    const rows = await qb.getMany();
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        requestId: row.requestId,
+        message: row.message,
+        category: row.category,
+        confidence: row.confidence,
+        provider: row.provider,
+        createdAt: toIso(row.createdAt),
+      })),
     };
   }
 }
