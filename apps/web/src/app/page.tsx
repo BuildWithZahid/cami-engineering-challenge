@@ -1,30 +1,42 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
   classifyMessage,
   createRequest,
   fetchRequests,
+  RequestListItem,
   RequestStatus,
   updateRequestStatus,
 } from '@/lib/api';
 
 const STATUSES: RequestStatus[] = ['open', 'in_progress', 'resolved'];
+const REQUESTS_QUERY_KEY = ['requests'] as const;
+
+function patchCachedRequest(
+  queryClient: QueryClient,
+  id: string,
+  patch: Partial<RequestListItem>,
+) {
+  queryClient.setQueryData<RequestListItem[]>(REQUESTS_QUERY_KEY, (rows) =>
+    rows?.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+  );
+}
 
 export default function HomePage() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
 
   const requestsQuery = useQuery({
-    queryKey: ['requests'],
+    queryKey: REQUESTS_QUERY_KEY,
     queryFn: fetchRequests,
   });
 
   const createMutation = useMutation({
     mutationFn: (message: string) => createRequest(message),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['requests'] });
+      queryClient.invalidateQueries({ queryKey: REQUESTS_QUERY_KEY });
       setDraft('');
     },
   });
@@ -32,11 +44,43 @@ export default function HomePage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: RequestStatus }) =>
       updateRequestStatus(id, status),
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: REQUESTS_QUERY_KEY });
+      const previous = queryClient.getQueryData<RequestListItem[]>(REQUESTS_QUERY_KEY);
+      patchCachedRequest(queryClient, id, { status });
+      return { previous };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(REQUESTS_QUERY_KEY, context.previous);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: REQUESTS_QUERY_KEY });
+    },
   });
 
   const classifyMutation = useMutation({
     mutationFn: ({ id, message }: { id: string; message: string }) =>
       classifyMessage(message, id),
+    onSuccess: (result, { id }) => {
+      queryClient.setQueryData<RequestListItem[]>(REQUESTS_QUERY_KEY, (rows) =>
+        rows?.map((row) => {
+          if (row.id !== id) {
+            return row;
+          }
+          return {
+            ...row,
+            category: result.category,
+            confidence: result.confidence,
+            // Same rule as POST /requests/classify: open moves to in_progress.
+            status: row.status === 'open' ? 'in_progress' : row.status,
+          };
+        }),
+      );
+      void queryClient.invalidateQueries({ queryKey: REQUESTS_QUERY_KEY });
+      void queryClient.invalidateQueries({ queryKey: ['history'] });
+    },
   });
 
   if (requestsQuery.isLoading) {
