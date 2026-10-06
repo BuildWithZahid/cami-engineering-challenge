@@ -21,6 +21,16 @@ Fix: one SQL query that joins a `COUNT(*)` subquery and a `DISTINCT ON (request_
 
 I did **not** paginate the endpoint. That would make the payload smaller, but the task is to keep the list correct while scaling with seeded notes — the bottleneck was notes, not the 1200 request rows. Pagination is a follow-up if the payload itself becomes the problem.
 
+### UI freshness
+
+Create already called `invalidateQueries(['requests'])`. Status and classify did not, and the QueryClient is configured with `staleTime: 10s` plus `refetchOnWindowFocus: false`, so the table stayed on cached rows after a successful API write.
+
+Fix is client-only:
+- **Status:** optimistic cache patch so the controlled `<select>` does not snap back, rollback on error, invalidate on settle.
+- **Classify:** patch `category` / `confidence` from the mutation result, and apply the current API rule (`open` → `in_progress`) so the row does not wait on a 360KB refetch. Then invalidate to reconcile with the server.
+
+I left the QueryClient defaults in place. Turning on refetch-on-focus would hide the bug without fixing the mutations.
+
 ## Classification history scope
 
 What you implemented for history / provider seam, and what you left out.
