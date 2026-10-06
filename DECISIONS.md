@@ -38,6 +38,19 @@ The workflow failed on a clean checkout for two “works on my machine” mismat
 1. **Migrate URL** — the Postgres service creates `cami`, and the job `DATABASE_URL` is `cami`, but the migrate step overrode it to `cami_app` (database does not exist). Local `npm run migration:run` uses `cami`, so it passed. Removed the override and run migrate before tests.
 2. **Web typecheck** — `next-env.d.ts` imports generated route types under `.next/`, which only exist after `next dev` / `next build`. CI has no `.next`. `typecheck` now runs `next typegen` first.
 
+### Controller structure
+
+`POST /requests/classify` mixed HTTP, validation, scoring policy, and persistence, with `body: any`.
+
+I moved:
+- input parsing into `parseClassifyBody` (typed body, `BadRequestException` instead of `{ error }` + 200)
+- confidence / unknown rules into `applyClassificationPolicy`
+- persist + `open` → `in_progress` into `RequestsService.classify`
+
+The controller only parses the body and delegates. I did **not** add class-validator or a classifier provider interface — the latter is the history task. I also left create/status handlers alone; they were not the problem.
+
+Invalid classify payloads now return HTTP 400. The web client already treats non-OK as failure and only sends valid messages.
+
 ## Classification history scope
 
 What you implemented for history / provider seam, and what you left out.

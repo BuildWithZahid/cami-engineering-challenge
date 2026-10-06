@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DataSource } from 'typeorm';
 import { createDataSource } from '../src/data-source';
 import { CustomerRequest } from '../src/requests/customer-request.entity';
+import { KeywordClassifier } from '../src/requests/keyword-classifier';
 import { RequestsService } from '../src/requests/requests.service';
 
 const PREFIX = `__list_perf_${Date.now()}__`;
@@ -16,7 +17,10 @@ describe('RequestsService.list', () => {
     ds = createDataSource();
     await ds.initialize();
     await ds.runMigrations();
-    service = new RequestsService(ds.getRepository(CustomerRequest));
+    service = new RequestsService(
+      ds.getRepository(CustomerRequest),
+      new KeywordClassifier(),
+    );
   });
 
   afterAll(async () => {
@@ -78,5 +82,29 @@ describe('RequestsService.list', () => {
     expect(notedIndex).toBeGreaterThan(-1);
     expect(emptyIndex).toBeGreaterThan(-1);
     expect(notedIndex).toBeLessThan(emptyIndex);
+  });
+
+  it('classify persists category and moves open requests to in_progress', async () => {
+    const [row] = await ds.query<{ id: string }[]>(
+      `INSERT INTO customer_requests (message, status, created_at, updated_at)
+       VALUES ($1, 'open', now(), now())
+       RETURNING id`,
+      [`${PREFIX} classify me`],
+    );
+    createdIds.push(row.id);
+
+    const result = await service.classify({
+      message: 'Please fix my invoice and payment charge',
+      requestId: row.id,
+    });
+    expect(result).toMatchObject({
+      category: 'billing',
+      requestId: row.id,
+    });
+
+    const stored = await service.getById(row.id);
+    expect(stored.status).toBe('in_progress');
+    expect(stored.category).toBe('billing');
+    expect(stored.confidence).toBeGreaterThan(0.5);
   });
 });

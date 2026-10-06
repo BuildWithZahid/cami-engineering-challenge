@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { applyClassificationPolicy } from './classification-policy';
+import { ClassifyInput, ClassifyResponse } from './classify.dto';
 import { CustomerRequest, RequestStatus } from './customer-request.entity';
+import { KeywordClassifier } from './keyword-classifier';
 
 export type RequestListItem = {
   id: string;
@@ -20,6 +23,7 @@ export class RequestsService {
   constructor(
     @InjectRepository(CustomerRequest)
     private readonly requests: Repository<CustomerRequest>,
+    private readonly classifier: KeywordClassifier,
   ) {}
 
   async list(): Promise<RequestListItem[]> {
@@ -102,8 +106,27 @@ export class RequestsService {
     return this.requests.save(row);
   }
 
-  async save(request: CustomerRequest): Promise<CustomerRequest> {
-    return this.requests.save(request);
+  async classify(input: ClassifyInput): Promise<ClassifyResponse> {
+    const result = applyClassificationPolicy(
+      input.message,
+      this.classifier.classify(input.message),
+    );
+
+    if (input.requestId) {
+      const existing = await this.getById(input.requestId);
+      existing.category = result.category;
+      existing.confidence = result.confidence;
+      if (existing.status === 'open') {
+        existing.status = 'in_progress';
+      }
+      await this.requests.save(existing);
+    }
+
+    return {
+      category: result.category,
+      confidence: result.confidence,
+      requestId: input.requestId ?? null,
+    };
   }
 }
 
