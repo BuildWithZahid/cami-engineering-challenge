@@ -4,11 +4,22 @@ Use this file to record assumptions, trade-offs, prioritisation, and anything yo
 
 ## Prioritisation
 
-What did you tackle first, what did you defer, and why?
+1. **List performance** first — it is user-visible under seed load and has a clear backend cause.
+2. Remaining core tasks next (UI freshness, CI, classify layering, history). Stretch only if time remains.
 
 ## Assumptions
 
+- `GET /requests` should keep returning the full list in `createdAt DESC` order. The web UI already slices to 25 rows client-side; changing pagination would alter the current contract.
+
 ## Trade-offs
+
+### List performance
+
+`list()` loaded every request, then queried **all notes per row** just to compute `noteCount` and `latestNotePreview` (~1 + N queries, and note volume in memory).
+
+Fix: one SQL query that joins a `COUNT(*)` subquery and a `DISTINCT ON (request_id)` latest-note subquery, plus an index on `(request_id, created_at DESC, id DESC)`.
+
+I did **not** paginate the endpoint. That would make the payload smaller, but the task is to keep the list correct while scaling with seeded notes — the bottleneck was notes, not the 1200 request rows. Pagination is a follow-up if the payload itself becomes the problem.
 
 ## Classification history scope
 

@@ -2,7 +2,6 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CustomerRequest, RequestStatus } from './customer-request.entity';
-import { RequestNote } from './request-note.entity';
 
 export type RequestListItem = {
   id: string;
@@ -21,37 +20,59 @@ export class RequestsService {
   constructor(
     @InjectRepository(CustomerRequest)
     private readonly requests: Repository<CustomerRequest>,
-    @InjectRepository(RequestNote)
-    private readonly notes: Repository<RequestNote>,
   ) {}
 
   async list(): Promise<RequestListItem[]> {
-    const rows = await this.requests.find({
-      order: { createdAt: 'DESC' },
-    });
+    // One query for the list: count notes and pick the latest preview in SQL
+    // instead of loading every note per request (N+1 under seed load).
+    const rows: Array<{
+      id: string;
+      message: string;
+      status: RequestStatus;
+      category: string | null;
+      confidence: number | string | null;
+      noteCount: number | string;
+      latestNotePreview: string | null;
+      createdAt: Date | string;
+      updatedAt: Date | string;
+    }> = await this.requests.query(`
+      SELECT
+        request.id,
+        request.message,
+        request.status,
+        request.category,
+        request.confidence,
+        request.created_at AS "createdAt",
+        request.updated_at AS "updatedAt",
+        COALESCE(note_count.total, 0)::int AS "noteCount",
+        latest_note.body AS "latestNotePreview"
+      FROM customer_requests request
+      LEFT JOIN (
+        SELECT request_id, COUNT(*)::int AS total
+        FROM request_notes
+        GROUP BY request_id
+      ) note_count ON note_count.request_id = request.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (request_id)
+          request_id,
+          body
+        FROM request_notes
+        ORDER BY request_id, created_at DESC, id DESC
+      ) latest_note ON latest_note.request_id = request.id
+      ORDER BY request.created_at DESC
+    `);
 
-    const items: RequestListItem[] = [];
-    for (const row of rows) {
-      const notes = await this.notes.find({
-        where: { requestId: row.id },
-        order: { createdAt: 'DESC' },
-      });
-      row.notes = notes;
-
-      items.push({
-        id: row.id,
-        message: row.message,
-        status: row.status,
-        category: row.category,
-        confidence: row.confidence,
-        noteCount: notes.length,
-        latestNotePreview: notes[0]?.body ?? null,
-        createdAt: row.createdAt.toISOString(),
-        updatedAt: row.updatedAt.toISOString(),
-      });
-    }
-
-    return items;
+    return rows.map((row) => ({
+      id: row.id,
+      message: row.message,
+      status: row.status,
+      category: row.category,
+      confidence: row.confidence == null ? null : Number(row.confidence),
+      noteCount: Number(row.noteCount),
+      latestNotePreview: row.latestNotePreview,
+      createdAt: toIso(row.createdAt),
+      updatedAt: toIso(row.updatedAt),
+    }));
   }
 
   async getById(id: string): Promise<CustomerRequest> {
@@ -84,4 +105,8 @@ export class RequestsService {
   async save(request: CustomerRequest): Promise<CustomerRequest> {
     return this.requests.save(request);
   }
+}
+
+function toIso(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }

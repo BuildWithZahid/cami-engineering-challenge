@@ -2,20 +2,24 @@
 
 ## Tools used
 
-List the AI tools you used (Cursor, GitHub Copilot, Claude Code, ChatGPT, etc.).
+- Cursor (Grok 4.6)
 
 ## How I used AI
 
-Briefly explain how you used AI during the challenge (exploring the codebase, drafting
-fixes, tests, docs, review, …).
+- Explored the repo and diagnosed `GET /requests` slowness.
+- Drafted the SQL aggregate list query, index migration, and list correctness test.
 
 ## What I changed or rejected
 
-Describe anything the AI suggested that you changed, corrected, or rejected.
+- Rejected paginating `GET /requests` for this task. The UI already slices to 25 rows; the bug was N+1 note loading, and the list contract should stay the same.
 
 ## Trade-offs
 
-Any AI-related trade-offs under the timebox.
+Kept the full-list payload ( ~1200 rows ) and fixed note aggregation in SQL instead.
+
+## Team workflow (optional stretch)
+
+If relevant: how you would set standards for AI-assisted development on a team.
 
 ## Team workflow (optional stretch)
 
