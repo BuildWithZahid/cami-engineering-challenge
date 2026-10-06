@@ -9,11 +9,13 @@
 - Explored the repo and diagnosed `GET /requests` slowness.
 - Drafted the SQL aggregate list query, index migration, and list correctness test.
 - Diagnosed stale TanStack Query cache after status/classify mutations.
+- Compared the GitHub Actions workflow to a local run: migrate targeted `cami_app`, and web typecheck depended on generated `.next` types.
 
 ## What I changed or rejected
 
 - Rejected paginating `GET /requests` for list performance. The UI already slices to 25 rows; the bug was N+1 note loading, and the list contract should stay the same.
 - Rejected “fixing” UI freshness by only enabling `refetchOnWindowFocus`. That would mask missing mutation cache updates.
+- Rejected creating a second `cami_app` database in CI. The service already provisioned `cami`; the step override was the bug.
 
 ## Trade-offs
 

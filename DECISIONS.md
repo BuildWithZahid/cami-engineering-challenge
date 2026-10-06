@@ -31,6 +31,13 @@ Fix is client-only:
 
 I left the QueryClient defaults in place. Turning on refetch-on-focus would hide the bug without fixing the mutations.
 
+### CI
+
+The workflow failed on a clean checkout for two “works on my machine” mismatches:
+
+1. **Migrate URL** — the Postgres service creates `cami`, and the job `DATABASE_URL` is `cami`, but the migrate step overrode it to `cami_app` (database does not exist). Local `npm run migration:run` uses `cami`, so it passed. Removed the override and run migrate before tests.
+2. **Web typecheck** — `next-env.d.ts` imports generated route types under `.next/`, which only exist after `next dev` / `next build`. CI has no `.next`. `typecheck` now runs `next typegen` first.
+
 ## Classification history scope
 
 What you implemented for history / provider seam, and what you left out.
